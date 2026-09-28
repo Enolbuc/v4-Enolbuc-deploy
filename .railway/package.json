@@ -1,0 +1,8 @@
+{
+  "name": "marketplace-v4-railway",
+  "private": true,
+  "description": "SDK для .railway/railway.ts. npm install здесь перед railway config plan/apply.",
+  "dependencies": {
+    "railway": "latest"
+  }
+}

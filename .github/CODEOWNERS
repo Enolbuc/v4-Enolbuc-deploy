@@ -1,0 +1,28 @@
+# Only the mentor can change grading infrastructure.
+# Students write code in gateway/, catalog-svc/, orders-svc/; protected paths below.
+
+/acceptance/                @artromone
+/web/                       @artromone
+/compose/                   @artromone
+/.github/                   @artromone
+/.golangci.yml              @artromone
+/.acceptance-manifest.sha256 @artromone
+/README.md                  @artromone
+/CONTRACT.md                @artromone
+/.githooks/                 @artromone
+/Makefile                   @artromone
+/DEPLOY.md                  @artromone
+/.env.example               @artromone
+
+# Лабораторная: утилита нагрузки фиксирована, LAB.md студент заполняет сам.
+/lab/load/                  @artromone
+
+# Готовые конфиги деплоя: студент их не пишет и не правит.
+/Dockerfile.gateway         @artromone
+/Dockerfile.catalog         @artromone
+/Dockerfile.orders          @artromone
+/.dockerignore              @artromone
+/.railway/                  @artromone
+
+# Скрипты CI и хуков.
+/scripts/                   @artromone

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Формат коммита: Conventional Commits, см. README «Ветки, коммиты, релизы».
+# Проверяется только первая строка. Merge- и revert-коммиты пропускаются.
+# Ту же проверку делает CI для всех коммитов PR (scripts/check-commits.sh).
+
+msg=$(sed -n '1p' "$1")
+
+case "$msg" in
+    Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+
+if ! printf '%s\n' "$msg" | grep -Eq '^(feat|fix|refactor|test|docs|chore|ci|build|perf)\((gateway|catalog|orders|internal|lab|deploy|repo)\)!?: [^A-Z[:space:]].{0,70}[^.[:space:]]$'; then
+    cat >&2 <<MSG
+commit-msg: сообщение не по формату:
+  $msg
+Нужно:  <type>(<scope>): <описание>
+  type:  feat fix refactor test docs chore ci build perf
+  scope: gateway catalog orders internal lab deploy repo
+  описание с маленькой буквы, без точки в конце, первая строка до 72 символов
+Пример: feat(orders): outbox worker with FOR UPDATE SKIP LOCKED
+MSG
+    exit 1
+fi

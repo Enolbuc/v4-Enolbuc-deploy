@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketplace v4 — консоль</title>
+<style>
+  :root {
+    --bg:        #0c0c0e;
+    --card:      #17171a;
+    --card-2:    #1e1e22;
+    --line:      #2a2a30;
+    --ink:       #e9e6e1;
+    --ink-dim:   #9b968e;
+    --ink-faint: #6b665f;
+    --amber:     #e0a82e;
+    --amber-dim: #8a6a1f;
+    --green:     #4ea86b;
+    --red:       #d4614e;
+    --radius:    14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* ---------- header ---------- */
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    color: var(--amber); font-size: 12px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; margin-bottom: 6px;
+  }
+  h1 { margin: 0 0 4px; font-size: 27px; font-weight: 650; letter-spacing: -.01em; }
+  .sub { color: var(--ink-dim); font-size: 14px; }
+
+  /* ---------- card ---------- */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  .card.lit { border-color: var(--amber); }
+  .card h2 {
+    margin: 0 0 16px; font-size: 17px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .badge {
+    display: inline-block; background: var(--amber); color: #17140c;
+    font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    padding: 4px 10px; border-radius: 7px; text-transform: uppercase;
+  }
+  .badge.ghost { background: var(--card-2); color: var(--ink-dim); }
+
+  .chip {
+    background: var(--card-2); border: 1px solid var(--line);
+    color: var(--amber); padding: 1px 7px; border-radius: 6px;
+    font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* ---------- forms ---------- */
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 150px; }
+  label { font-size: 12px; color: var(--ink-dim); letter-spacing: .03em; }
+
+  input, select {
+    background: var(--bg); border: 1px solid var(--line); color: var(--ink);
+    padding: 9px 11px; border-radius: 9px; font-size: 14px; font-family: inherit;
+    width: 100%; transition: border-color .15s;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--amber-dim); }
+
+  button {
+    background: var(--amber); color: #17140c; border: 0;
+    padding: 9px 16px; border-radius: 9px;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: filter .15s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.12); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost { background: var(--card-2); color: var(--ink); border: 1px solid var(--line); }
+  button.danger { background: transparent; color: var(--red); border: 1px solid #43302c; }
+  button.sm { padding: 5px 11px; font-size: 13px; }
+
+  /* ---------- listings ---------- */
+  .item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 0; border-top: 1px solid var(--line);
+  }
+  .item:first-child { border-top: 0; }
+  .item-main { flex: 1; min-width: 0; }
+  .item-title { font-weight: 550; margin-bottom: 3px; }
+  .item-meta { font-size: 12.5px; color: var(--ink-faint); }
+  .price { color: var(--amber); font-weight: 650; white-space: nowrap; }
+  .stock-0 { color: var(--red); }
+
+  .empty { color: var(--ink-faint); padding: 22px 0; text-align: center; font-size: 14px; }
+
+  .pager { display: flex; align-items: center; gap: 12px; margin-top: 16px; color: var(--ink-dim); font-size: 13px; }
+
+  /* ---------- log ---------- */
+  .log { max-height: 260px; overflow-y: auto; font-size: 12.5px; }
+  .log-line {
+    display: flex; gap: 10px; padding: 5px 0;
+    border-top: 1px solid var(--line); align-items: baseline;
+  }
+  .log-line:first-child { border-top: 0; }
+  .st { font-weight: 700; min-width: 30px; }
+  .st.s2 { color: var(--green); }
+  .st.s4 { color: var(--amber); }
+  .st.s5 { color: var(--red); }
+  .log-path { flex: 1; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-rid { color: var(--ink-faint); font-size: 11.5px; }
+
+  /* ---------- toast ---------- */
+  #toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 9px; z-index: 50; }
+  .toast {
+    background: var(--card-2); border: 1px solid var(--line);
+    border-left: 3px solid var(--red);
+    padding: 11px 15px; border-radius: 10px; max-width: 360px; font-size: 13.5px;
+  }
+  .toast.ok { border-left-color: var(--green); }
+  .toast b { display: block; margin-bottom: 3px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-dim); }
+  .toast ul { margin: 6px 0 0; padding-left: 17px; color: var(--ink-dim); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Спринт 12 · marketplace v4 · gateway → gRPC → Kafka</div>
+    <h1>Консоль маркетплейса</h1>
+    <div class="sub">Фронт ходит в твой Go-сервис. Открой DevTools → Network и смотри на запросы.</div>
+  </header>
+
+  <!-- API base -->
+  <div class="card">
+    <h2><span class="badge ghost">API</span> Адрес бэкенда</h2>
+    <div class="row">
+      <div class="field" style="flex: 3 1 320px">
+        <label for="api-base">Base URL (пусто = тот же адрес, откуда открыта страница)</label>
+        <input id="api-base" placeholder="https://marketplace-api.onrender.com" autocomplete="off">
+      </div>
+      <button id="api-save">Сохранить</button>
+      <button id="api-ping" class="ghost">Проверить /healthz</button>
+    </div>
+  </div>
+
+  <!-- auth -->
+  <div class="card lit" id="auth-card">
+    <h2><span class="badge">Авторизация</span></h2>
+
+    <div id="auth-forms">
+      <div class="row">
+        <div class="field"><label for="email">E-mail</label><input id="email" type="email" placeholder="a@a.com" autocomplete="username"></div>
+        <div class="field"><label for="password">Пароль</label><input id="password" type="password" placeholder="hunter22" autocomplete="current-password"></div>
+        <div class="field" style="flex: 0 1 130px">
+          <label for="role">Роль</label>
+          <select id="role"><option value="seller">seller</option><option value="buyer">buyer</option></select>
+        </div>
+        <button id="btn-register">Register</button>
+        <button id="btn-login" class="ghost">Login</button>
+      </div>
+    </div>
+
+    <div id="auth-who" class="hidden">
+      <div class="row" style="align-items: center">
+        <div class="item-main">
+          <div class="item-title" id="who-email"></div>
+          <div class="item-meta">роль <span class="chip" id="who-role"></span> · access-токен живёт 5 минут, потом фронт сам дёрнет <span class="chip">/auth/refresh</span></div>
+        </div>
+        <button id="btn-refresh" class="ghost sm">Refresh вручную</button>
+        <button id="btn-logout" class="danger sm">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- create -->
+  <div class="card hidden" id="create-card">
+    <h2><span class="badge">Новый листинг</span> <span class="badge ghost">только seller</span></h2>
+    <div class="row">
+      <div class="field" style="flex: 2 1 220px"><label for="n-title">Название</label><input id="n-title" placeholder="Молоко"></div>
+      <div class="field" style="flex: 0 1 130px"><label for="n-price">Цена</label><input id="n-price" type="number" step="0.01" placeholder="50.00"></div>
+      <div class="field" style="flex: 0 1 110px"><label for="n-stock">Остаток</label><input id="n-stock" type="number" placeholder="10"></div>
+      <button id="btn-create">Создать</button>
+    </div>
+  </div>
+
+  <!-- orders -->
+  <div class="card hidden" id="orders-card">
+    <h2><span class="badge">Мои заказы</span> <span class="badge ghost">только buyer</span> <span class="item-meta mono" id="orders-label"></span></h2>
+    <div id="orders"><div class="empty">Заказов пока нет</div></div>
+  </div>
+
+  <!-- listings -->
+  <div class="card">
+    <h2><span class="badge ghost">Каталог</span> <span class="item-meta mono" id="total-label"></span></h2>
+    <div id="listings"><div class="empty">Загружаю…</div></div>
+    <div class="pager">
+      <button id="prev" class="ghost sm">← Назад</button>
+      <span id="page-label">—</span>
+      <button id="next" class="ghost sm">Вперёд →</button>
+      <span style="flex:1"></span>
+      <label for="limit" style="margin:0">на странице</label>
+      <select id="limit" style="width:auto"><option>5</option><option selected>10</option><option>20</option><option>50</option></select>
+    </div>
+  </div>
+
+  <!-- log -->
+  <div class="card">
+    <h2><span class="badge ghost">Сеть</span> Что уходит на бэкенд</h2>
+    <div class="log" id="log"><div class="empty">Запросов пока не было</div></div>
+  </div>
+
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- state ----------
+  const LS = {
+    base:    "mp.apiBase",
+    access:  "mp.access",
+    refresh: "mp.refresh",
+    user:    "mp.user",
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    base:    localStorage.getItem(LS.base) || "",
+    access:  localStorage.getItem(LS.access) || "",
+    refresh: localStorage.getItem(LS.refresh) || "",
+    user:    JSON.parse(localStorage.getItem(LS.user) || "null"),
+    offset:  0,
+    limit:   10,
+    total:   0,
+  };
+
+  const apiBase = () => (state.base || window.location.origin).replace(/\/+$/, "");
+
+  // ---------- toasts ----------
+  function toast(title, message, fields, ok) {
+    const el = document.createElement("div");
+    el.className = "toast" + (ok ? " ok" : "");
+    const b = document.createElement("b");
+    b.textContent = title;
+    el.appendChild(b);
+    el.appendChild(document.createTextNode(message || ""));
+    if (Array.isArray(fields) && fields.length) {
+      const ul = document.createElement("ul");
+      for (const f of fields) {
+        const li = document.createElement("li");
+        li.textContent = `${f.field}: ${f.message}`;
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+    }
+    $("toasts").appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+
+  // ---------- request log ----------
+  function logRequest(method, path, status, ms, rid, cache) {
+    const box = $("log");
+    if (box.firstElementChild && box.firstElementChild.className === "empty") box.innerHTML = "";
+    const line = document.createElement("div");
+    line.className = "log-line mono";
+
+    const st = document.createElement("span");
+    st.className = "st s" + String(status)[0];
+    st.textContent = status;
+
+    const p = document.createElement("span");
+    p.className = "log-path";
+    p.textContent = `${method} ${path}`;
+
+    const d = document.createElement("span");
+    d.className = "log-rid";
+    d.textContent = `${ms}ms`;
+
+    const r = document.createElement("span");
+    r.className = "log-rid";
+    r.textContent = rid ? rid.slice(0, 8) : "—";
+
+    const c = document.createElement("span");
+    c.className = "log-rid";
+    c.textContent = cache || "";
+
+    line.append(st, p, d, r, c);
+    box.prepend(line);
+    while (box.children.length > 40) box.lastElementChild.remove();
+  }
+
+  // ---------- http ----------
+  // Single place where every request goes out. Handles the Authorization
+  // header, one transparent refresh retry on 401, and the request log.
+  async function api(method, path, body, opts = {}) {
+    const started = performance.now();
+    const headers = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (state.access && !opts.noAuth) headers["Authorization"] = "Bearer " + state.access;
+    Object.assign(headers, opts.headers || {});
+
+    let resp;
+    try {
+      resp = await fetch(apiBase() + path, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (e) {
+      logRequest(method, path, 0, Math.round(performance.now() - started), "");
+      toast("Сеть", "Не достучался до " + apiBase() + ". Сервер запущен? CORS настроен?");
+      throw e;
+    }
+
+    const ms = Math.round(performance.now() - started);
+    logRequest(method, path, resp.status, ms, resp.headers.get("X-Request-ID") || "", resp.headers.get("X-Cache") || "");
+
+    // access-токен протух — пробуем один раз обновить и повторить.
+    if (resp.status === 401 && state.refresh && !opts.retried && !opts.noAuth) {
+      if (await doRefresh(true)) {
+        return api(method, path, body, { ...opts, retried: true });
+      }
+    }
+
+    const total = resp.headers.get("X-Total-Count");
+    if (resp.status === 204) return { ok: true, data: null, total };
+
+    let data = null;
+    const text = await resp.text();
+    if (text) { try { data = JSON.parse(text); } catch { /* не JSON — покажем как есть */ } }
+
+    if (!resp.ok) {
+      const err = data || {};
+      if (!opts.quiet) {
+        toast(err.error || `HTTP ${resp.status}`, err.message || text || "", err.fields);
+      }
+      return { ok: false, status: resp.status, data: err, total };
+    }
+    return { ok: true, status: resp.status, data, total };
+  }
+
+  // ---------- auth ----------
+  // JWT не зашифрован — это base64url(header).base64url(payload).подпись.
+  // Payload читается любым клиентом, поэтому секретов туда класть нельзя.
+  // Подпись мы проверить не можем (секрет только на сервере) — и не должны.
+  function decodeJWT(token) {
+    try {
+      const p = token.split(".")[1];
+      const bin = atob(p.replace(/-/g, "+").replace(/_/g, "/"));
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch { return null; }
+  }
+
+  function saveSession(data, role, email) {
+    state.access = data.access_token || "";
+    state.refresh = data.refresh_token || "";
+    localStorage.setItem(LS.access, state.access);
+    localStorage.setItem(LS.refresh, state.refresh);
+
+    const prev = state.user || {};
+    const claims = decodeJWT(state.access) || {};
+    state.user = {
+      id:    (data.user && data.user.id)    || claims.sub  || prev.id    || "",
+      email: (data.user && data.user.email) || email       || prev.email || "",
+      role:  (data.user && data.user.role)  || claims.role || role || prev.role || "",
+    };
+    localStorage.setItem(LS.user, JSON.stringify(state.user));
+    renderAuth();
+  }
+
+  function clearSession() {
+    state.access = state.refresh = ""; state.user = null;
+    localStorage.removeItem(LS.access);
+    localStorage.removeItem(LS.refresh);
+    localStorage.removeItem(LS.user);
+    renderAuth();
+    loadListings();
+  }
+
+  async function doRefresh(silent) {
+    const r = await api("POST", "/auth/refresh", { refresh_token: state.refresh }, { noAuth: true, quiet: !!silent });
+    if (r.ok) { saveSession(r.data); return true; }
+    clearSession();
+    if (!silent) toast("Сессия", "Refresh не принят — залогинься заново");
+    return false;
+  }
+
+  function renderAuth() {
+    const in_ = !!state.access;
+    $("auth-forms").classList.toggle("hidden", in_);
+    $("auth-who").classList.toggle("hidden", !in_);
+    $("auth-card").classList.toggle("lit", !in_);
+    $("create-card").classList.toggle("hidden", !(in_ && state.user && state.user.role === "seller"));
+    $("orders-card").classList.toggle("hidden", !(in_ && state.user && state.user.role === "buyer"));
+    if (state.user) {
+      $("who-email").textContent = state.user.email || "(без e-mail)";
+      $("who-role").textContent = state.user.role || "?";
+    }
+  }
+
+  // ---------- listings ----------
+  async function loadListings() {
+    const box = $("listings");
+    const r = await api("GET", `/listings?limit=${state.limit}&offset=${state.offset}`, undefined, { noAuth: true });
+    if (!r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить каталог</div>'; return; }
+
+    const rows = Array.isArray(r.data) ? r.data : [];
+    state.total = parseInt(r.total || "0", 10) || 0;
+    $("total-label").textContent = state.total ? `всего ${state.total}` : "";
+
+    box.innerHTML = "";
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">Пусто. Залогинься как seller и создай первый листинг.</div>';
+    }
+    for (const it of rows) box.appendChild(renderItem(it));
+
+    const from = state.total ? state.offset + 1 : 0;
+    $("page-label").textContent = `${from}–${state.offset + rows.length} из ${state.total}`;
+    $("prev").disabled = state.offset === 0;
+    $("next").disabled = state.offset + state.limit >= state.total;
+  }
+
+  // ---------- orders ----------
+  async function loadOrders() {
+    if (!state.access || !state.user || state.user.role !== "buyer") return;
+    const box = $("orders");
+    const r = await api("GET", "/orders?limit=20&offset=0", undefined, { quiet: true });
+    if (!r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить заказы</div>'; return; }
+    const rows = Array.isArray(r.data) ? r.data : [];
+    $("orders-label").textContent = r.total ? `всего ${r.total}` : "";
+    box.innerHTML = rows.length ? "" : '<div class="empty">Заказов пока нет</div>';
+    for (const o of rows) {
+      const el = document.createElement("div");
+      el.className = "item";
+      const main = document.createElement("div");
+      main.className = "item-main";
+      const t = document.createElement("div");
+      t.className = "item-title mono";
+      t.textContent = `${String(o.id).slice(0, 8)} · listing ${String(o.listing_id).slice(0, 8)}`;
+      const m = document.createElement("div");
+      m.className = "item-meta mono";
+      m.textContent = `${o.created_at || ""}`;
+      main.append(t, m);
+      const q = document.createElement("div");
+      q.className = "price";
+      q.textContent = `× ${o.qty}`;
+      el.append(main, q);
+      box.appendChild(el);
+    }
+  }
+
+  function renderItem(it) {
+    const el = document.createElement("div");
+    el.className = "item";
+
+    const main = document.createElement("div");
+    main.className = "item-main";
+    const t = document.createElement("div");
+    t.className = "item-title";
+    t.textContent = it.title;
+    const m = document.createElement("div");
+    m.className = "item-meta mono";
+    m.textContent = `${String(it.id).slice(0, 8)} · seller ${String(it.seller_id || "").slice(0, 8)}`;
+    main.append(t, m);
+
+    const price = document.createElement("div");
+    price.className = "price";
+    price.textContent = Number(it.price).toFixed(2);
+
+    const stock = document.createElement("div");
+    stock.className = "item-meta" + (it.stock === 0 ? " stock-0" : "");
+    stock.style.minWidth = "72px";
+    stock.textContent = `остаток ${it.stock} · продано ${it.sold ?? 0}`;
+
+    el.append(main, price, stock);
+
+    const me = state.user || {};
+    if (state.access && me.role === "buyer") {
+      const b = document.createElement("button");
+      b.className = "sm";
+      b.textContent = "Купить 1";
+      b.disabled = it.stock === 0;
+      b.onclick = async () => {
+        // Idempotency-Key: повтор того же запроса (сеть мигнула, двойной клик)
+        // не создаст второй заказ и не спишет остаток дважды.
+        const key = crypto.randomUUID();
+        const r = await api("POST", "/orders", { listing_id: it.id, qty: 1 }, { headers: { "Idempotency-Key": key } });
+        if (r.ok) toast("Заказ создан", `id ${String(r.data.id).slice(0, 8)} · «продано» догонит через Kafka`, null, true);
+        loadListings();
+        loadOrders();
+      };
+      el.appendChild(b);
+    }
+    if (state.access && me.role === "seller" && me.id && it.seller_id === me.id) {
+      const p = document.createElement("button");
+      p.className = "ghost sm";
+      p.textContent = "Цена";
+      p.onclick = async () => {
+        const v = prompt("Новая цена", it.price);
+        if (v === null) return;
+        const r = await api("PATCH", `/listings/${it.id}`, { price: Number(v) });
+        if (r.ok) loadListings();
+      };
+      const d = document.createElement("button");
+      d.className = "danger sm";
+      d.textContent = "Удалить";
+      d.onclick = async () => {
+        const r = await api("DELETE", `/listings/${it.id}`);
+        if (r.ok) loadListings();
+      };
+      el.append(p, d);
+    }
+    return el;
+  }
+
+  // ---------- wiring ----------
+  $("api-base").value = state.base;
+  $("api-save").onclick = () => {
+    state.base = $("api-base").value.trim();
+    localStorage.setItem(LS.base, state.base);
+    toast("API", "Теперь запросы идут на " + apiBase(), null, true);
+    loadListings();
+  };
+  $("api-ping").onclick = async () => {
+    const r = await api("GET", "/healthz", undefined, { noAuth: true, quiet: true });
+    toast("healthz", r.ok ? "gateway, catalog-svc и orders-svc живы" : `не отвечает (${r.status || "сеть"}): gateway не достучался до одного из gRPC-сервисов`, null, r.ok);
+  };
+
+  $("btn-register").onclick = async () => {
+    const email = $("email").value.trim(), password = $("password").value, role = $("role").value;
+    const r = await api("POST", "/auth/register", { email, password, role }, { noAuth: true });
+    if (r.ok) { saveSession(r.data, role, email); loadListings(); loadOrders(); }
+  };
+  $("btn-login").onclick = async () => {
+    const email = $("email").value.trim(), password = $("password").value;
+    const r = await api("POST", "/auth/login", { email, password }, { noAuth: true });
+    if (r.ok) { saveSession(r.data, $("role").value, email); loadListings(); loadOrders(); }
+  };
+  $("btn-refresh").onclick = () => doRefresh(false);
+  $("btn-logout").onclick = clearSession;
+
+  $("btn-create").onclick = async () => {
+    const body = {
+      title: $("n-title").value.trim(),
+      price: Number($("n-price").value),
+      stock: parseInt($("n-stock").value, 10),
+    };
+    const r = await api("POST", "/listings", body);
+    if (r.ok) {
+      toast("Создано", body.title, null, true);
+      $("n-title").value = $("n-price").value = $("n-stock").value = "";
+      loadListings();
+    }
+  };
+
+  $("prev").onclick = () => { state.offset = Math.max(0, state.offset - state.limit); loadListings(); };
+  $("next").onclick = () => { state.offset += state.limit; loadListings(); };
+  $("limit").onchange = (e) => { state.limit = parseInt(e.target.value, 10); state.offset = 0; loadListings(); };
+
+  renderAuth();
+  loadListings();
+  loadOrders();
+})();
+</script>
+</body>
+</html>

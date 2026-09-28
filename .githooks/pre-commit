@@ -1,0 +1,30 @@
+#!/bin/sh
+# Прогоняет перед коммитом то же, что и CI. Включается через `make setup`.
+
+fail=0
+
+unformatted=$(gofmt -l $(git ls-files '*.go' | grep -v '^gen/'))
+if [ -n "$unformatted" ]; then
+    echo "pre-commit: не отформатировано gofmt:"
+    echo "$unformatted"
+    echo "  исправить: gofmt -w ."
+    fail=1
+fi
+
+if ! go vet ./... ; then
+    echo "pre-commit: go vet нашёл проблемы"
+    fail=1
+fi
+
+if ! go build ./... ; then
+    echo "pre-commit: проект не собирается"
+    fail=1
+fi
+
+if ! sha256sum -c --quiet .acceptance-manifest.sha256 2>/dev/null; then
+    echo "pre-commit: acceptance/, web/ или compose/ не совпадают с .acceptance-manifest.sha256"
+    echo "  эти папки менять нельзя. Верни их: git checkout -- acceptance/ web/ compose/"
+    fail=1
+fi
+
+exit $fail

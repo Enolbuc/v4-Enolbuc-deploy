@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  acceptance-untouched:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: verify acceptance/, web/, compose/ unchanged
+        run: sha256sum -c .acceptance-manifest.sha256
+
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL_CATALOG: postgres://app:app@localhost:5433/catalog?sslmode=disable
+      DATABASE_URL_ORDERS: postgres://app:app@localhost:5433/orders?sslmode=disable
+      DATABASE_URL_AUTH: postgres://app:app@localhost:5433/auth?sslmode=disable
+      REDIS_URL: redis://localhost:6380
+      KAFKA_BROKERS: localhost:9094
+      JWT_SECRET: test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      # Инфра поднимается до unit-тестов: интеграционные тесты студента
+      # против реальных Postgres/Redis/Kafka (см. README) должны иметь куда подключаться.
+      - name: start infra
+        run: docker compose -f compose/docker-compose.yml up -d --wait
+      - name: gofmt
+        run: test -z "$(gofmt -l $(git ls-files '*.go' | grep -v '^gen/'))" || (gofmt -l . ; exit 1)
+      - name: vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: unit & integration tests
+        run: go test -race -count=1 -cover ./...
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12
+      # Acceptance гоняется против сервисов, собранных из Dockerfile.* —
+      # ровно так же их соберёт Railway. Стек пересоздаётся пустым.
+      - name: build & start full stack
+        run: |
+          docker compose -f compose/docker-compose.yml down -v
+          docker compose -f compose/docker-compose.yml --profile services up -d --build --wait
+      - name: acceptance
+        working-directory: acceptance
+        env:
+          GATEWAY_URL: http://localhost:8080
+          KAFKA_BROKERS: localhost:9094
+          REDIS_URL: redis://localhost:6380
+          COMPOSE_FILE: ${{ github.workspace }}/compose/docker-compose.yml
+        run: go test -race -count=1 -v ./...
+      - name: dump logs
+        if: failure()
+        run: docker compose -f compose/docker-compose.yml --profile services logs --no-color --tail=200
+      - name: tear down
+        if: always()
+        run: docker compose -f compose/docker-compose.yml --profile services down -v

@@ -1,0 +1,42 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - bodyclose
+          - errcheck
+        path: _test\.go
+    paths:
+      - gen$
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - gen$
+      - third_party$
+      - builtin$
+      - examples$

@@ -1,0 +1,119 @@
+# Локальный стек v4. Порты сдвинуты относительно v3, чтобы оба проекта
+# могли работать рядом: Postgres 5433, Redis 6380, Kafka 9094 (снаружи).
+#
+#   make infra   — только инфра, сервисы запускаешь сам через go run
+#   make up      — инфра + твои три сервиса, собранные из Dockerfile.*
+#   make down    — снести вместе с данными
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: catalog
+    ports:
+      - "5433:5432"
+    # Вторую базу (orders) создаёт init-скрипт. Один инстанс, две базы:
+    # у сервисов нет общих таблиц, в облаке это два DATABASE_URL в Neon.
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d auth"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # Тот же образ, что в Railway-шаблоне: Kafka в KRaft-режиме, native-сборка
+  # (~180 МБ RAM против ~700 у JVM). Два listener-а: kafka:9092 для сервисов
+  # внутри compose-сети, localhost:9094 для тестов и утилит с хоста.
+  kafka:
+    image: apache/kafka-native:3.9.2
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: /tmp/kraft-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    # В native-образе нет kafka-*.sh скриптов, поэтому проверяем только порт.
+    # Скрипты для лабораторной берутся из JVM-образа: см. lab/LAB.md.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  catalog-svc:
+    build:
+      context: ..
+      dockerfile: Dockerfile.catalog
+    profiles: [services]
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/catalog?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      GRPC_ADDR: ":50051"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  orders-svc:
+    build:
+      context: ..
+      dockerfile: Dockerfile.orders
+    profiles: [services]
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/orders?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      CATALOG_GRPC_ADDR: catalog-svc:50051
+      GRPC_ADDR: ":50052"
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      catalog-svc: { condition: service_started }
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile.gateway
+    profiles: [services]
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: test-secret
+      PORT: "8080"
+      DATABASE_URL: postgres://app:app@postgres:5432/auth?sslmode=disable
+      CATALOG_GRPC_ADDR: catalog-svc:50051
+      ORDERS_GRPC_ADDR: orders-svc:50052
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      postgres: { condition: service_healthy }
+      catalog-svc: { condition: service_started }
+      orders-svc: { condition: service_started }

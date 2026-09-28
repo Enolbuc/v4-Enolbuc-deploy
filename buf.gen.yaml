@@ -1,0 +1,12 @@
+version: v2
+# make gen: генерирует Go-код из proto/ в gen/. gen/ коммитится, чтобы для
+# сборки (в том числе на Railway) не требовался protoc.
+# opt: module=marketplace означает, что go_package в .proto должен начинаться
+# с "marketplace/", например "marketplace/gen/catalogpb".
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: module=marketplace
+  - local: protoc-gen-go-grpc
+    out: .
+    opt: module=marketplace

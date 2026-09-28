@@ -1,0 +1,20 @@
+# build artifacts
+/gateway/gateway
+/catalog-svc/catalog-svc
+/orders-svc/orders-svc
+**/*.test
+**/coverage.out
+
+# local secrets
+.env
+
+# railway iac sdk
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+.DS_Store

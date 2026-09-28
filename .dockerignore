@@ -1,0 +1,10 @@
+.git
+.github
+.railway
+acceptance
+compose
+lab
+node_modules
+*.md
+.golangci.yml
+.acceptance-manifest.sha256

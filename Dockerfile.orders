@@ -1,0 +1,16 @@
+# Один Dockerfile на сервис, контекст сборки — корень монорепы (общий go.mod).
+# Railway и compose собирают по нему сами; локально Docker для разработки не нужен.
+
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.su[m] ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/orders-svc ./orders-svc
+
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
+COPY --from=build /out/orders-svc /usr/local/bin/orders-svc
+USER app
+EXPOSE 50052
+ENTRYPOINT ["/usr/local/bin/orders-svc"]

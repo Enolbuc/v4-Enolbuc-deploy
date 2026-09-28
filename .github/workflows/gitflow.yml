@@ -1,0 +1,37 @@
+name: gitflow
+
+# Правила из README «Ветки, коммиты, релизы»:
+#   PR в main   — только из develop.
+#   PR в develop — только из <type>/<slug>.
+#   Все коммиты PR по Conventional Commits.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check source and target branch
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          case "$BASE" in
+            main)
+              [ "$HEAD" = "develop" ] || { echo "PR в main только из develop, а не из '$HEAD'"; exit 1; } ;;
+            develop)
+              echo "$HEAD" | grep -Eq '^(feat|fix|refactor|test|docs|chore|ci|build|perf)/[a-z0-9][a-z0-9-]*$' \
+                || { echo "PR в develop только из ветки <type>/<slug>, а не из '$HEAD'"; exit 1; } ;;
+            *)
+              echo "PR в '$BASE'? Разрешены только main и develop"; exit 1 ;;
+          esac
+
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: check commit messages
+        run: scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD"
