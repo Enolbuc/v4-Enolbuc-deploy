@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	pb "marketplace/gen/catalogpb"
 	"marketplace/internal/migrate"
 )
 
@@ -58,6 +59,7 @@ func main() {
 	}
 
 	srv := grpc.NewServer()
+	pb.RegisterCatalogServer(srv, &server{pool: pool})
 
 	healthSrv := health.NewServer()
 	healthSrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
