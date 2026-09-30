@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package marketplace.orders.v1;
+
+option go_package = "marketplace/gen/orderspb";
+
+message Order {
+  string id = 1;
+  string buyer_id = 2;
+  string listing_id = 3;
+  int64 qty = 4;
+  string created_at = 5;
+}
+
+message CreateOrderRequest {
+  string buyer_id = 1;
+  string listing_id = 2;
+  int64 qty = 3;
+  string idempotency_key = 4;
+}
+
+message CreateOrderResponse {
+  Order order = 1;
+}
+
+message ListOrdersRequest {
+  string buyer_id = 1;
+  int64 limit = 2;
+  int64 offset = 3;
+}
+
+message ListOrdersResponse {
+  repeated Order items = 1;
+  int64 total = 2;
+}
+
+service Orders {
+  rpc Create(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc List(ListOrdersRequest) returns (ListOrdersResponse);
+}
