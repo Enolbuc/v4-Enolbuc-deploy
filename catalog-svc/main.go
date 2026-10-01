@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -31,7 +32,7 @@ func requireEnv(key string) string {
 func main() {
 	databaseURL := requireEnv("DATABASE_URL")
 	_ = requireEnv("REDIS_URL")
-	_ = requireEnv("KAFKA_BROKERS")
+	kafkaBrokers := requireEnv("KAFKA_BROKERS")
 
 	addr := os.Getenv("GRPC_ADDR")
 	if addr == "" {
@@ -51,6 +52,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "run migrations: %v\n", err)
 		os.Exit(1)
 	}
+
+	go runOrderConsumer(ctx, pool, strings.Split(kafkaBrokers, ","))
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
