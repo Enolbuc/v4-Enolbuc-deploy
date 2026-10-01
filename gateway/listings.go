@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -116,6 +117,10 @@ func (s *listingsServer) create(w http.ResponseWriter, r *http.Request) {
 
 func (s *listingsServer) get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "listing not found")
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
@@ -184,6 +189,10 @@ func (s *listingsServer) list(w http.ResponseWriter, r *http.Request) {
 
 func (s *listingsServer) update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "listing not found")
+		return
+	}
 
 	var req struct {
 		Title *string  `json:"title"`
@@ -243,6 +252,11 @@ func (s *listingsServer) update(w http.ResponseWriter, r *http.Request) {
 
 func (s *listingsServer) delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "listing not found")
+		return
+	}
+
 	sellerID, _ := r.Context().Value(userIDKey).(string)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
