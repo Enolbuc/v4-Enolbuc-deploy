@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/segmentio/kafka-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -32,7 +34,7 @@ func requireEnv(key string) string {
 
 func main() {
 	databaseURL := requireEnv("DATABASE_URL")
-	_ = requireEnv("KAFKA_BROKERS")
+	kafkaBrokers := requireEnv("KAFKA_BROKERS")
 	catalogAddr := requireEnv("CATALOG_GRPC_ADDR")
 
 	addr := os.Getenv("GRPC_ADDR")
@@ -60,6 +62,15 @@ func main() {
 		os.Exit(1)
 	}
 	defer catalogConn.Close()
+
+	writer := &kafka.Writer{
+		Addr:                   kafka.TCP(strings.Split(kafkaBrokers, ",")...),
+		Balancer:               &kafka.LeastBytes{},
+		AllowAutoTopicCreation: true,
+	}
+	defer writer.Close()
+
+	go runOutboxWorker(ctx, pool, writer)
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
