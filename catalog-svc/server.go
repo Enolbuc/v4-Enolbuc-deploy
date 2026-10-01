@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	pb "marketplace/gen/catalogpb"
@@ -17,6 +20,7 @@ import (
 type server struct {
 	pb.UnimplementedCatalogServer
 	pool *pgxpool.Pool
+	rdb  *redis.Client
 }
 
 type rowScanner interface {
@@ -71,6 +75,12 @@ func (s *server) Create(ctx context.Context, req *pb.CreateListingRequest) (*pb.
 	return &pb.CreateListingResponse{Listing: listing}, nil
 }
 func (s *server) Get(ctx context.Context, req *pb.GetListingRequest) (*pb.GetListingResponse, error) {
+	listing, cacheState := cacheGetListing(ctx, s.rdb, req.Id)
+	if cacheState == "HIT" {
+		grpc.SetHeader(ctx, metadata.Pairs("x-cache", "HIT"))
+		return &pb.GetListingResponse{Listing: listing}, nil
+	}
+
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, seller_id, title, price, stock, sold, created_at
 		FROM listings WHERE id = $1
@@ -84,6 +94,11 @@ func (s *server) Get(ctx context.Context, req *pb.GetListingRequest) (*pb.GetLis
 		return nil, status.Errorf(codes.Internal, "get listing: %v", err)
 	}
 
+	if cacheState == "MISS" {
+		cacheSetListing(ctx, s.rdb, listing)
+	}
+
+	grpc.SetHeader(ctx, metadata.Pairs("x-cache", cacheState))
 	return &pb.GetListingResponse{Listing: listing}, nil
 }
 func (s *server) Update(ctx context.Context, req *pb.UpdateListingRequest) (*pb.UpdateListingResponse, error) {
@@ -104,6 +119,8 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateListingRequest) (*pb.
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "update listing: %v", err)
 	}
+
+	cacheDelListing(ctx, s.rdb, req.Id)
 
 	return &pb.UpdateListingResponse{Listing: listing}, nil
 }
@@ -145,6 +162,8 @@ func (s *server) Delete(ctx context.Context, req *pb.DeleteListingRequest) (*pb.
 		return nil, status.Errorf(codes.Internal, "delete listing: %v", err)
 	}
 
+	cacheDelListing(ctx, s.rdb, req.Id)
+
 	return &pb.DeleteListingResponse{}, nil
 }
 func (s *server) Reserve(ctx context.Context, req *pb.ReserveRequest) (*pb.ReserveResponse, error) {
@@ -175,6 +194,8 @@ func (s *server) Reserve(ctx context.Context, req *pb.ReserveRequest) (*pb.Reser
 	if err := tx.Commit(ctx); err != nil {
 		return nil, status.Errorf(codes.Internal, "commit: %v", err)
 	}
+
+	cacheDelListing(ctx, s.rdb, req.ListingId)
 
 	return &pb.ReserveResponse{Remaining: remaining}, nil
 }

@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	pb "marketplace/gen/catalogpb"
@@ -118,7 +120,8 @@ func (s *listingsServer) get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
-	resp, err := s.catalog.Get(ctx, &pb.GetListingRequest{Id: id})
+	var md metadata.MD
+	resp, err := s.catalog.Get(ctx, &pb.GetListingRequest{Id: id}, grpc.Header(&md))
 	if err != nil {
 		writeGRPCError(w, err)
 		return
@@ -128,6 +131,10 @@ func (s *listingsServer) get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", "bad price from catalog")
 		return
+	}
+
+	if cache := md.Get("x-cache"); len(cache) > 0 {
+		w.Header().Set("X-Cache", cache[0])
 	}
 	writeJSON(w, http.StatusOK, out)
 }
