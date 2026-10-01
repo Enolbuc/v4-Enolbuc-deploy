@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "marketplace/gen/catalogpb"
+	"marketplace/gen/orderspb"
 	"marketplace/internal/migrate"
 )
 
@@ -68,6 +69,7 @@ func main() {
 
 	auth := &authServer{pool: pool, jwtSecret: []byte(jwtSecret)}
 	listings := &listingsServer{catalog: pb.NewCatalogClient(catalogConn)}
+	orders := &ordersServer{orders: orderspb.NewOrdersClient(ordersConn)}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler(catalogConn, ordersConn))
@@ -80,6 +82,8 @@ func main() {
 	mux.HandleFunc("GET /listings/{id}", listings.get)
 	mux.Handle("PATCH /listings/{id}", auth.requireAuth(requireRole("seller", http.HandlerFunc(listings.update))))
 	mux.Handle("DELETE /listings/{id}", auth.requireAuth(requireRole("seller", http.HandlerFunc(listings.delete))))
+	mux.Handle("POST /orders", auth.requireAuth(requireRole("buyer", http.HandlerFunc(orders.create))))
+	mux.Handle("GET /orders", auth.requireAuth(requireRole("buyer", http.HandlerFunc(orders.list))))
 
 	var handler http.Handler = mux
 	handler = cors(handler)
