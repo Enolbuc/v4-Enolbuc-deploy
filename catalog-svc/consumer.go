@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -21,9 +22,15 @@ type orderCreatedEvent struct {
 
 func runOrderConsumer(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, brokers []string) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: brokers,
-		Topic:   "order.created",
-		GroupID: "catalog-svc",
+		Brokers:           brokers,
+		Topic:             "order.created",
+		GroupID:           "catalog-svc",
+		SessionTimeout:    6 * time.Second,
+		RebalanceTimeout:  6 * time.Second,
+		HeartbeatInterval: 2 * time.Second,
+		Dialer: &kafka.Dialer{
+			Timeout: 2 * time.Second,
+		},
 	})
 	defer reader.Close()
 
