@@ -16,7 +16,7 @@ import {
 } from "railway/iac";
 
 // ← твой репозиторий, owner/repo
-const REPO = "OWNER/marketplace-v4";
+const REPO = "Enolbuc/v4-Enolbuc-deploy";
 
 export default defineRailway((ctx) => {
   // Окружение выбирается при `railway link` / `railway environment`:
