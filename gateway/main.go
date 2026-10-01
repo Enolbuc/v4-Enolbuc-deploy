@@ -8,7 +8,10 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	pb "marketplace/gen/catalogpb"
 	"marketplace/internal/migrate"
 )
 
@@ -27,8 +30,8 @@ func requireEnv(key string) string {
 func main() {
 	jwtSecret := requireEnv("JWT_SECRET")
 	databaseURL := requireEnv("DATABASE_URL")
-	_ = requireEnv("CATALOG_GRPC_ADDR")
-	_ = requireEnv("ORDERS_GRPC_ADDR")
+	catalogAddr := requireEnv("CATALOG_GRPC_ADDR")
+	ordersAddr := requireEnv("ORDERS_GRPC_ADDR")
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -49,12 +52,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	catalogConn, err := grpc.NewClient(catalogAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dial catalog-svc: %v\n", err)
+		os.Exit(1)
+	}
+	defer catalogConn.Close()
+
+	ordersConn, err := grpc.NewClient(ordersAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dial orders-svc: %v\n", err)
+		os.Exit(1)
+	}
+	defer ordersConn.Close()
+
 	auth := &authServer{pool: pool, jwtSecret: []byte(jwtSecret)}
+	listings := &listingsServer{catalog: pb.NewCatalogClient(catalogConn)}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", healthHandler(catalogConn, ordersConn))
 	mux.HandleFunc("POST /auth/register", auth.register)
 	mux.HandleFunc("POST /auth/login", auth.login)
 	mux.HandleFunc("POST /auth/refresh", auth.refresh)
+
+	mux.Handle("POST /listings", auth.requireAuth(requireRole("seller", http.HandlerFunc(listings.create))))
+	mux.HandleFunc("GET /listings", listings.list)
+	mux.HandleFunc("GET /listings/{id}", listings.get)
+	mux.Handle("PATCH /listings/{id}", auth.requireAuth(requireRole("seller", http.HandlerFunc(listings.update))))
+	mux.Handle("DELETE /listings/{id}", auth.requireAuth(requireRole("seller", http.HandlerFunc(listings.delete))))
 
 	var handler http.Handler = mux
 	handler = cors(handler)
