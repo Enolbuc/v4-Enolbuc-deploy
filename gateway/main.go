@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -14,6 +17,7 @@ import (
 	pb "marketplace/gen/catalogpb"
 	"marketplace/gen/orderspb"
 	"marketplace/internal/migrate"
+	"marketplace/web"
 )
 
 //go:embed migrations/*.sql
@@ -39,7 +43,8 @@ func main() {
 		port = "8080"
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -72,6 +77,14 @@ func main() {
 	orders := &ordersServer{orders: orderspb.NewOrdersClient(ordersConn)}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			writeError(w, http.StatusNotFound, "not_found", "unknown path")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(web.Index)
+	})
 	mux.HandleFunc("GET /healthz", healthHandler(catalogConn, ordersConn))
 	mux.HandleFunc("POST /auth/register", auth.register)
 	mux.HandleFunc("POST /auth/login", auth.login)
@@ -91,8 +104,20 @@ func main() {
 	handler = logger(handler)
 	handler = requestID(handler)
 
+	srv := &http.Server{Addr: ":" + port, Handler: handler}
+
+	go func() {
+		<-ctx.Done()
+		fmt.Println("gateway: shutting down...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
+		}
+	}()
+
 	fmt.Printf("gateway listening on :%s\n", port)
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		os.Exit(1)
 	}
