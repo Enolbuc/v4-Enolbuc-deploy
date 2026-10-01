@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,15 @@ import (
 	catalogpb "marketplace/gen/catalogpb"
 	pb "marketplace/gen/orderspb"
 )
+
+type orderCreatedEvent struct {
+	EventID   string `json:"event_id"`
+	OrderID   string `json:"order_id"`
+	BuyerID   string `json:"buyer_id"`
+	ListingID string `json:"listing_id"`
+	Qty       int64  `json:"qty"`
+	CreatedAt string `json:"created_at"`
+}
 
 type server struct {
 	pb.UnimplementedOrdersServer
@@ -35,14 +45,44 @@ func (s *server) Create(ctx context.Context, req *pb.CreateOrderRequest) (*pb.Cr
 	}
 
 	id := uuid.NewString()
+	eventID := uuid.NewString()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "begin tx: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
 	var createdAt time.Time
-	err := s.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO orders (id, buyer_id, listing_id, qty)
 		VALUES ($1, $2, $3, $4)
 		RETURNING created_at
 	`, id, req.BuyerId, req.ListingId, req.Qty).Scan(&createdAt)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create order: %v", err)
+	}
+
+	payload, err := json.Marshal(orderCreatedEvent{
+		EventID:   eventID,
+		OrderID:   id,
+		BuyerID:   req.BuyerId,
+		ListingID: req.ListingId,
+		Qty:       req.Qty,
+		CreatedAt: createdAt.UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "marshal event: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO outbox (event_id, topic, key, payload) VALUES ($1, $2, $3, $4)
+	`, eventID, "order.created", id, payload); err != nil {
+		return nil, status.Errorf(codes.Internal, "write outbox: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, status.Errorf(codes.Internal, "commit: %v", err)
 	}
 
 	return &pb.CreateOrderResponse{
@@ -55,6 +95,7 @@ func (s *server) Create(ctx context.Context, req *pb.CreateOrderRequest) (*pb.Cr
 		},
 	}, nil
 }
+
 func (s *server) List(ctx context.Context, req *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
 	var total int64
 	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM orders WHERE buyer_id = $1`, req.BuyerId).Scan(&total); err != nil {
