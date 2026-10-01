@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package marketplace.catalog.v1;
+
+option go_package = "marketplace/gen/catalogpb";
+
+message Listing {
+    string id = 1;
+    string seller_id = 2;
+    string title = 3;
+    string price = 4;
+    int64 stock = 5;
+    int64 sold = 6;
+    string created_at = 7;
+}
+
+message CreateListingRequest {
+    string seller_id = 1;
+    string title = 2;
+    string price = 3;
+    int64 stock = 4;
+}
+
+message CreateListingResponse {
+    Listing listing = 1;
+}
+
+message GetListingRequest {
+    string id = 1;
+}
+message GetListingResponse {
+    Listing listing = 1;
+}
+message ListListingsRequest {
+    int64 limit = 1;
+    int64 offset = 2;
+
+}
+message ListListingsResponse {
+    repeated Listing items = 1;
+    int64 total = 2;
+}
+
+message UpdateListingRequest {
+    string id = 1;
+    string seller_id = 2;
+    optional string title = 3;
+    optional string price = 4;
+    optional int64 stock = 5;
+}
+
+message UpdateListingResponse {
+    Listing listing = 1;
+}
+
+message DeleteListingRequest {
+    string id = 1;
+    string seller_id = 2;
+}
+
+message DeleteListingResponse {}
+
+message ReserveRequest {
+    string listing_id = 1;
+    int64 qty = 2;
+}
+
+message ReserveResponse {
+    int64 remaining = 1;
+}
+
+service Catalog {
+  rpc Create(CreateListingRequest) returns (CreateListingResponse);
+  rpc Get(GetListingRequest) returns (GetListingResponse);
+  rpc List(ListListingsRequest) returns (ListListingsResponse);
+  rpc Update(UpdateListingRequest) returns (UpdateListingResponse);
+  rpc Delete(DeleteListingRequest) returns (DeleteListingResponse);
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+}
