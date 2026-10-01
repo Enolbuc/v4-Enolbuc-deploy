@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+
 	pb "marketplace/gen/orderspb"
 )
 
@@ -51,17 +54,25 @@ func (s *ordersServer) create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
+	var md metadata.MD
 	resp, err := s.orders.Create(ctx, &pb.CreateOrderRequest{
-		BuyerId:   buyerID,
-		ListingId: req.ListingID,
-		Qty:       req.Qty,
-	})
+		BuyerId:        buyerID,
+		ListingId:      req.ListingID,
+		Qty:            req.Qty,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+	}, grpc.Header(&md))
 	if err != nil {
 		writeGRPCError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toOrderResponse(resp.Order))
+	httpStatus := http.StatusCreated
+	if replay := md.Get("x-idempotent-replay"); len(replay) > 0 && replay[0] == "true" {
+		w.Header().Set("Idempotent-Replayed", "true")
+		httpStatus = http.StatusOK
+	}
+
+	writeJSON(w, httpStatus, toOrderResponse(resp.Order))
 }
 
 func (s *ordersServer) list(w http.ResponseWriter, r *http.Request) {
