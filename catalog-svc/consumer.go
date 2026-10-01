@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -18,7 +19,7 @@ type orderCreatedEvent struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func runOrderConsumer(ctx context.Context, pool *pgxpool.Pool, brokers []string) {
+func runOrderConsumer(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, brokers []string) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
 		Topic:   "order.created",
@@ -36,7 +37,7 @@ func runOrderConsumer(ctx context.Context, pool *pgxpool.Pool, brokers []string)
 			continue
 		}
 
-		if err := handleOrderCreated(ctx, pool, msg.Value); err != nil {
+		if err := handleOrderCreated(ctx, pool, rdb, msg.Value); err != nil {
 			slog.Error("consumer: handle", "error", err)
 			continue
 		}
@@ -47,7 +48,7 @@ func runOrderConsumer(ctx context.Context, pool *pgxpool.Pool, brokers []string)
 	}
 }
 
-func handleOrderCreated(ctx context.Context, pool *pgxpool.Pool, payload []byte) error {
+func handleOrderCreated(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, payload []byte) error {
 	var event orderCreatedEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return err
@@ -71,5 +72,10 @@ func handleOrderCreated(ctx context.Context, pool *pgxpool.Pool, payload []byte)
 		return err
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	cacheDelListing(ctx, rdb, event.ListingID)
+	return nil
 }
